@@ -1,0 +1,12 @@
+pillow
+aiohttp
+asyncio
+python-dotenv
+python-telegram-bot
+telethon
+telegram
+apscheduler
+pytz 
+tzlocal
+urllib3
+six
