@@ -35,7 +35,7 @@ Source Bot is an advanced Telegram bot designed to monitor channels, detect imag
 - Edit message permissions enabled
 - Channel ID (must start with `-100`)
 ### - Enter API_HASH and API_ID, along with Bot Token in config.py!
-### – Change your password in config.py!
+### – Change your password (self.BOT_PASSWORD = "") in bot.py!
 
 ### Installation & Setup (Linux/MacOS)
 
