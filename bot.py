@@ -35,7 +35,7 @@ class SourceBot:
         self.is_paused = False
         self.shutdown_event = asyncio.Event()
         self.authenticated_users = set()  
-        self.BOT_PASSWORD = "mow"  
+        self.BOT_PASSWORD = ""  
         self.stopped_channels = set()  
 
         # Set up signal handlers
