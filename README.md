@@ -34,19 +34,64 @@ Source Bot is an advanced Telegram bot designed to monitor channels, detect imag
 - Admin privileges for the bot in the channel
 - Edit message permissions enabled
 - Channel ID (must start with `-100`)
-### - Enter API_HASH and API_ID, along with Bot Token in config.py!
-### – Change your password (self.BOT_PASSWORD = "") in bot.py!
 
 ### Installation & Setup (Linux/MacOS)
 
-#### 1️⃣ Add the bot to your Telegram channel
-Make sure to assign the bot admin rights with message editing permissions.
+You'll need a dedicated server to run this bot 24/7. You can buy a cloud server or a VPS.
 
-#### 2️⃣ Get your channel ID
-Send a message to `@userinfobot` to retrieve your channel ID. It should start with `-100`.
+### – Log in into your server's console.
+```sh
+sudo apt update && sudo apt upgrade -y
+sudo apt install python3 python3-pip -y
+```
 
-#### 3️⃣ Authenticate the Bot
-Use the following commands in your chat with the bot:
+```sh
+git clone https://github.com/uasneppy/PicSourcer.git
+```
+
+```sh
+cd PicSourcer
+```
+
+```sh
+sudo apt update && sudo apt install python3 python3-venv -y
+```
+
+```sh
+python3 -m venv venv
+```
+
+```sh
+python3 -m venv venv
+```
+```sh
+python3 -m venv venv
+```
+```sh
+pip3 install -r requirements.txt
+```
+```sh
+nano config.py
+```
+
+### - Enter API_HASH, API_ID, and Bot Token.
+### – Press Ctrl+X, then Enter to Save.
+
+```sh
+nano bot.py
+```
+
+### – Change your password (self.BOT_PASSWORD = "") in bot.py.
+### – Press Ctrl+X, then Enter to Save.
+
+## – All set! Now run the bot with the following command:
+
+```sh
+python3 bot.py
+```
+Everything should run perfectly fine. Use Google if any problems arise, they should be easily fixable. 
+
+## - How to use the bot: 
 
 ```sh
 /password <password>   # Authenticate with the bot's password
@@ -56,7 +101,7 @@ Use the following commands in your chat with the bot:
 
 #### 4️⃣ Add a Channel for Monitoring
 ```sh
-/add_channel <channel_id>  # Start monitoring a channel
+/add_channel <channel_id>  # Start monitoring a channel. Add bot as an admin with a permission to edit messages first!
 ```
 
 #### 5️⃣ Manage Your Channels
@@ -89,4 +134,3 @@ If you encounter any issues, contact the bot administrator for support.
 
 ---
 📌 **Stay organized, credit sources, and enhance your Telegram channel with Source Bot!**
-
