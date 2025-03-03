@@ -39,10 +39,10 @@ Source Bot is an advanced Telegram bot designed to monitor channels, detect imag
 
 You'll need a dedicated server to run this bot 24/7. You can buy a cloud server or a VPS.
 
-### – Log in into your server's console.
+### – Log in into your server's console (Debian or Ubuntu).
+
 ```sh
-sudo apt update && sudo apt upgrade -y
-sudo apt install python3 python3-pip -y
+sudo apt update && sudo apt install python3 python3-venv -y
 ```
 
 ```sh
@@ -54,19 +54,12 @@ cd PicSourcer
 ```
 
 ```sh
-sudo apt update && sudo apt install python3 python3-venv -y
+python3 -m venv venv
+```
+```sh
+source venv/bin/activate
 ```
 
-```sh
-python3 -m venv venv
-```
-
-```sh
-python3 -m venv venv
-```
-```sh
-python3 -m venv venv
-```
 ```sh
 pip3 install -r requirements.txt
 ```
@@ -81,7 +74,7 @@ nano config.py
 nano bot.py
 ```
 
-### – Change your password (self.BOT_PASSWORD = "") in bot.py.
+### – Change your password (self.BOT_PASSWORD = "").
 ### – Press Ctrl+X, then Enter to Save.
 
 ## – All set! Now run the bot with the following command:
