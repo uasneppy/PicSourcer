@@ -86,6 +86,9 @@ Everything should run perfectly fine. Use Google if any problems arise, they sho
 
 ## - How to use the bot: 
 
+## Use a blank telegram account, not your main one!
+## Start @FindFurryPicBot. Then:
+
 ```sh
 /password <password>   # Authenticate with the bot's password
 /authenticate         # Set up MTProto for source detection
