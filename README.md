@@ -130,3 +130,7 @@ If you encounter any issues, contact the bot administrator for support.
 
 ---
 📌 **Stay organized, credit sources, and enhance your Telegram channel with Source Bot!**
+
+### Credits:
+### @FindFurryPicBot on Telegram for an amazing pic sourcer. Give it a try on its own and tip the author! I will be donating start for them each month to "pay the bill" :). 
+
