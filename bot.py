@@ -1,6 +1,7 @@
 import signal
 import asyncio
 import time
+import aiohttp
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -35,7 +36,7 @@ class SourceBot:
         self.is_paused = False
         self.shutdown_event = asyncio.Event()
         self.authenticated_users = set()  
-        self.BOT_PASSWORD = ""  
+        self.BOT_PASSWORD = "mow"  
         self.stopped_channels = set()  
 
         # Set up signal handlers
@@ -255,28 +256,66 @@ class SourceBot:
                 logger.debug("Skipping post processing - bot is paused")
                 return
 
-            channel_id = str(update.channel_post.chat_id)
+            # Handle regular, edited, and scheduled posts
+            message = None
+            if hasattr(update, 'edited_channel_post') and update.edited_channel_post:
+                message = update.edited_channel_post
+                post_type = "edited"
+            elif hasattr(update, 'channel_post') and update.channel_post:
+                message = update.channel_post
+                post_type = "regular"
+
+            if not message:
+                logger.debug("No message found")
+                return
+
+            channel_id = str(message.chat_id)
             if channel_id in self.stopped_channels:
                 logger.debug(f"Skipping post processing - channel {channel_id} is stopped")
                 return
 
-            if self.start_time and update.channel_post.date.timestamp() < self.start_time:
-                logger.debug(f"Skipping old message from before bot start: {update.channel_post.message_id}")
-                return
+            # Check if it's a scheduled post and handle accordingly
+            is_scheduled = getattr(message, 'forward_date', None) is not None or getattr(message, 'has_scheduled_date', False)
+            logger.debug(f"Processing {post_type} channel post (scheduled: {is_scheduled})")
 
-            logger.debug(f"Received channel post update: {update}")
-            logger.debug(f"Processing post from channel: {channel_id}")
+            # Always get fresh message data to ensure we have the latest version
+            try:
+                chat = await context.bot.get_chat(channel_id)
+                fresh_message = await context.bot.get_messages(
+                    chat_id=channel_id,
+                    message_ids=message.message_id,
+                    scheduled=True
+                )
+                if fresh_message:
+                    message = fresh_message[0]
+                    logger.debug(f"Retrieved fresh message data (scheduled: {is_scheduled})")
+                else:
+                    logger.warning(f"Could not retrieve fresh data for message {message.message_id}")
+            except Exception as e:
+                logger.error(f"Failed to get fresh message data: {str(e)}")
+                # Continue with original message if fresh data retrieval fails
+
+            if self.start_time and message.date and message.date.timestamp() < self.start_time:
+                logger.debug(f"Skipping old message from before bot start: {message.message_id}")
+                return
 
             if not is_monitored_channel(channel_id):
                 logger.debug(f"Channel {channel_id} is not in monitored list")
                 return
 
-            if not update.channel_post.photo:
+            # Get photo from the message
+            photo = None
+            if message.photo:
+                photo = message.photo[-1]
+                logger.debug("Found photo in regular message")
+            elif hasattr(message, 'photo') and message.photo:
+                photo = message.photo[-1]
+                logger.debug("Found photo in scheduled message")
+
+            if not photo:
                 logger.debug("Post does not contain a photo")
                 return
 
-            message = update.channel_post
-            photo = message.photo[-1]  
             original_caption = message.caption or ""
 
             if len(original_caption) > 1000:  
@@ -309,42 +348,34 @@ class SourceBot:
             source = await self.image_searcher.search_image(context.bot, image_data)
 
             try:
-                def escape_markdown_v2(text):
-                    """Escape special characters for MarkdownV2 format"""
-                    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-                    escaped_text = text
-                    for char in special_chars:
-                        escaped_text = escaped_text.replace(char, f'\\{char}')
-                    return escaped_text
-
                 if source:
                     escaped_url = source['source_url']  
-                    link_text = "🖼️ Тиць"  
-                    escaped_link_text = escape_markdown_v2(link_text)
+                    link_text = "*👉🏼 Автор*"
 
-                    if original_caption:
-                        escaped_caption = escape_markdown_v2(original_caption)
-                        new_caption = f"{escaped_caption}\n\n[{escaped_link_text}]({escaped_url})"
+                    # Log original caption with any existing links
+                    logger.debug(f"Original caption before escaping: {original_caption}")
+
+                    # Properly escape original caption while preserving existing links
+                    escaped_caption = self.escape_markdown_v2_preserve_links(original_caption)
+                    logger.debug(f"Escaped caption with preserved links: {escaped_caption}")
+
+                    # Build new caption
+                    if escaped_caption:
+                        new_caption = f"{escaped_caption}\n\n[{link_text}]({escaped_url})"
                     else:
-                        new_caption = f"[{escaped_link_text}]({escaped_url})"
+                        new_caption = f"[{link_text}]({escaped_url})"
+
+                    logger.debug(f"Final caption with source attribution: {new_caption}")
+
+                    await context.bot.edit_message_caption(
+                        chat_id=message.chat_id,
+                        message_id=message.message_id,
+                        caption=new_caption,
+                        parse_mode='MarkdownV2'
+                    )
+                    logger.info(f"Successfully updated post {message.message_id} in channel {channel_id}")
                 else:
-                    if original_caption:
-                        escaped_caption = escape_markdown_v2(original_caption)
-                        new_caption = f"{escaped_caption}\n\nБудемо раді, якщо ви знайдете художника 👀"
-                    else:
-                        new_caption = "Будемо раді, якщо ви знайдете художника 👀"
-
-                logger.debug(f"Attempting to edit message {message.message_id} in channel {channel_id}")
-                logger.debug(f"Original caption: {original_caption}")
-                logger.debug(f"New caption: {new_caption}")
-
-                await context.bot.edit_message_caption(
-                    chat_id=message.chat_id,
-                    message_id=message.message_id,
-                    caption=new_caption,
-                    parse_mode='MarkdownV2'
-                )
-                logger.info(f"Successfully updated post {message.message_id} in channel {channel_id}")
+                    logger.info(f"No source found for message {message.message_id} in channel {channel_id}, leaving post unedited")
 
             except Exception as e:
                 error_message = str(e).lower()
@@ -356,10 +387,38 @@ class SourceBot:
                     logger.error(f"Message {message.message_id} not found in channel {channel_id}")
                 else:
                     logger.error(f"Failed to edit message in channel {channel_id}: {str(e)}")
-                return
+                    logger.debug(f"Failed caption content: {new_caption}")
 
         except Exception as e:
             logger.error(f"Error handling channel post: {str(e)}", exc_info=True)
+
+    def escape_markdown_v2_preserve_links(self, text: str) -> str:
+        """Escape special characters for MarkdownV2 format while preserving links"""
+        if not text:
+            return ""
+
+        # First, temporarily replace markdown links with placeholders
+        links = []
+        import re
+        pattern = r'\[(.*?)\]\((.*?)\)'
+
+        def replace_link(match):
+            links.append(match.group(0))
+            return f"LINK_PLACEHOLDER_{len(links)-1}_"
+
+        text_with_placeholders = re.sub(pattern, replace_link, text)
+
+        # Escape special characters
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        escaped_text = text_with_placeholders
+        for char in special_chars:
+            escaped_text = escaped_text.replace(char, f'\\{char}')
+
+        # Restore links
+        for i, link in enumerate(links):
+            escaped_text = escaped_text.replace(f"LINK_PLACEHOLDER_{i}_", link)
+
+        return escaped_text
 
     async def pause_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /pause command to toggle bot's processing state"""
@@ -469,62 +528,62 @@ class SourceBot:
         if not await self.check_auth(update):
             return
 
-        help_text = r"""
-🤖 Source Bot Help
+        help_text = """
+        🤖 *Source Bot Help*
 
-Getting Started
-1\. Add bot to your channel as admin
-2\. Get channel ID from @userinfobot \(should start with \-100\)
-3\. Complete authentication steps below
+        *Getting Started*
+        1. Add bot to your channel as admin
+        2. Get channel ID from @userinfobot (should start with -100)
+        3. Complete authentication steps below
 
-Authentication Commands
-• `/password <password>` \- Initial bot access authentication
-• `/authenticate` \- Set up MTProto for source detection
-• `/cancel` \- Cancel authentication process
+        *Authentication Commands*
+        • `/password <password>` - Initial bot access authentication
+        • `/authenticate` - Set up MTProto for source detection
+        • `/cancel` - Cancel authentication process
 
-Channel Management
-• `/add_channel <channel_id>` \- Start monitoring channel
-• `/delete_channel <channel_id>` \- Remove channel
-• `/list_channels` \- Show all monitored channels
-• `/stop <channel_id>` \- Pause specific channel
-• `/resume <channel_id>` \- Resume specific channel
+        *Channel Management*
+        • `/add_channel <channel_id>` - Start monitoring channel
+        • `/delete_channel <channel_id>` - Remove channel
+        • `/list_channels` - Show all monitored channels
+        • `/stop <channel_id>` - Pause specific channel
+        • `/resume <channel_id>` - Resume specific channel
 
-Bot Control
-• `/start` \- Initialize bot
-• `/pause` \- Toggle all updates on/off
-• `/help` \- Show this help
+        *Bot Control*
+        • `/start` - Initialize bot
+        • `/pause` - Toggle all updates on/off
+        • `/help` - Show this help
 
-Automatic Features
-• Image Detection: Monitors new posts with images
-• Source Finding: Searches across multiple platforms
-• Caption Edit: Adds source links automatically
-• Rate Limiting: Prevents API overload
+        *Automatic Features*
+        • Image Detection: Monitors new posts with images
+        • Source Finding: Searches across multiple platforms
+        • Caption Edit: Adds source links automatically
+        • Rate Limiting: Prevents API overload
 
-Supported Platforms
-• e621
-• FurAffinity
-• Twitter/X
-• Bluesky
+        *Supported Platforms*
+        • e621
+        • FurAffinity
+        • Twitter/X
+        • Bluesky
 
-Requirements
-• Bot must be channel admin
-• Edit messages permission required
-• Channel ID must start with \-100
-• Initial password authentication
-• MTProto authentication
+        *Requirements*
+        • Bot must be channel admin
+        • Edit messages permission required
+        • Channel ID must start with -100
+        • Initial password authentication
+        • MTProto authentication
 
-Channel Status Icons
-• 🟢 Active: Processing images
-• 🔴 Stopped: Updates paused
+        *Channel Status Icons*
+        • 🟢 Active: Processing images
+        • 🔴 Stopped: Updates paused
 
-Tips
-• Use /list\_channels to monitor status
-• Check both auth steps are complete
-• Ensure proper admin permissions
-• Source links appear below captions
+        *Tips*
+        • Use /list_channels to monitor status
+        • Check both auth steps are complete
+        • Ensure proper admin permissions
+        • Source links appear below captions
 
-Need help? Contact bot administrator\.
-"""
+        Need help? Contact bot administrator.
+        """
         await update.message.reply_text(help_text, parse_mode='MarkdownV2')
         logger.debug("Sent help message to user")
 
@@ -568,7 +627,8 @@ Need help? Contact bot administrator\.
             self.application.add_handler(CommandHandler("resume", self.resume_channel))
             self.application.add_handler(CommandHandler("help", self.help_command))
             self.application.add_handler(MessageHandler(
-                filters.ChatType.CHANNEL & filters.PHOTO,
+                (filters.ChatType.CHANNEL & filters.PHOTO) | 
+                (filters.ChatType.CHANNEL & filters.UpdateType.EDITED_CHANNEL_POST),
                 self.handle_channel_post
             ))
             self.application.add_handler(MessageHandler(
