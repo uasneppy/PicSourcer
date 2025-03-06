@@ -7,7 +7,7 @@ from typing import List
 load_dotenv()
 
 # Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN = ''
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 
 # File to store monitored channels
 CHANNELS_FILE = 'monitored_channels.json'
@@ -57,8 +57,8 @@ SOURCE_DOMAINS = {
 }
 
 # MTProto Configuration
-TELEGRAM_API_ID = ''
-TELEGRAM_API_HASH = ''
+TELEGRAM_API_ID = os.getenv('TELEGRAM_API_ID')
+TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
 
 def is_monitored_channel(channel_id: str) -> bool:
     """Check if a channel is in the monitored list"""
