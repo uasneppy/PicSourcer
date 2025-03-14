@@ -10,8 +10,41 @@ fi
 SERVICE_NAME="telegram_bot"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 SERVICE_FILE="${SERVICE_NAME}.service"
+ENV_FILE="${SCRIPT_DIR}/.env"
 
-# Check if service already exists
+# Check for required environment variables
+required_vars=(
+    "TELEGRAM_BOT_TOKEN"
+    "TELEGRAM_API_ID"
+    "TELEGRAM_API_HASH"
+)
+
+# Check if .env file exists
+if [ ! -f "$ENV_FILE" ]; then
+    echo "❌ Error: .env file not found at $ENV_FILE"
+    echo "Please create .env file with required environment variables:"
+    printf '%s\n' "${required_vars[@]}" | sed 's/^/- /'
+    exit 1
+fi
+
+# Source .env file
+source "$ENV_FILE"
+
+# Check for required environment variables
+missing_vars=()
+for var in "${required_vars[@]}"; do
+    if [ -z "${!var}" ]; then
+        missing_vars+=("$var")
+    fi
+done
+
+if [ ${#missing_vars[@]} -ne 0 ]; then
+    echo "❌ Error: Missing required environment variables:"
+    printf '%s\n' "${missing_vars[@]}" | sed 's/^/- /'
+    exit 1
+fi
+
+# Check if service already exists and stop it
 if systemctl is-active --quiet ${SERVICE_NAME}; then
     echo "Service is already running. Stopping it first..."
     systemctl stop ${SERVICE_NAME}
@@ -35,6 +68,14 @@ chmod 644 /etc/systemd/system/${SERVICE_FILE} || {
     exit 1
 }
 
+# Create symlink to .env file if it doesn't exist
+if [ ! -f "/etc/default/${SERVICE_NAME}" ]; then
+    ln -s "$ENV_FILE" "/etc/default/${SERVICE_NAME}" || {
+        echo "Failed to create environment file symlink"
+        exit 1
+    }
+fi
+
 # Reload systemd
 echo "Reloading systemd..."
 systemctl daemon-reload || {
@@ -56,21 +97,31 @@ systemctl start ${SERVICE_NAME} || {
     exit 1
 }
 
+# Wait for service to start
+echo "Waiting for service to start..."
+sleep 5
+
 # Check status
 echo "Checking service status..."
-systemctl status ${SERVICE_NAME}
-
-# Verify service is running
 if systemctl is-active --quiet ${SERVICE_NAME}; then
-    echo "✅ Installation successful! The bot will now start automatically with the system."
+    echo "✅ Installation successful! The bot service is now running."
+    echo
+    echo "Service Status:"
+    systemctl status ${SERVICE_NAME} --no-pager
     echo
     echo "Use these commands to manage the service:"
     echo "  sudo systemctl start ${SERVICE_NAME}    # Start the bot"
     echo "  sudo systemctl stop ${SERVICE_NAME}     # Stop the bot"
     echo "  sudo systemctl restart ${SERVICE_NAME}  # Restart the bot"
     echo "  sudo systemctl status ${SERVICE_NAME}   # Check bot status"
+    echo
+    echo "View logs with:"
+    echo "  sudo journalctl -u ${SERVICE_NAME} -f   # Follow logs"
+    echo "  sudo journalctl -u ${SERVICE_NAME} -n 50   # Last 50 lines"
     exit 0
 else
-    echo "❌ Service installation failed. Please check the logs above for errors."
+    echo "❌ Service installation failed or service is not running."
+    echo "Check the logs for more information:"
+    journalctl -u ${SERVICE_NAME} --no-pager -n 50
     exit 1
 fi
