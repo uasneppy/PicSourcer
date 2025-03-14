@@ -10,7 +10,7 @@ from telegram.ext import (
     ContextTypes,
     ConversationHandler
 )
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 from config import (
     TELEGRAM_BOT_TOKEN, 
     is_monitored_channel, 
@@ -37,7 +37,8 @@ class SourceBot:
         self.shutdown_event = asyncio.Event()
         self.authenticated_users = set()  
         self.BOT_PASSWORD = "mow"  
-        self.stopped_channels = set()  
+        self.stopped_channels = set()
+        self.edited_posts = set()  # Track posts that have been edited with source info
 
         # Set up signal handlers
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
@@ -115,30 +116,46 @@ class SourceBot:
             await update.message.reply_text("Already authenticated!")
             return ConversationHandler.END
 
+        keyboard = [[KeyboardButton("❌ Cancel")]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
         await update.message.reply_text(
-            "Please enter your phone number (including country code, e.g., +1234567890):"
+            "Please enter your phone number (including country code, e.g., +1234567890):",
+            reply_markup=reply_markup
         )
         return PHONE_NUMBER
 
     async def phone_number_received(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle phone number input"""
+        if update.message.text == "❌ Cancel":
+            return await self.cancel(update, context)
+
         phone_number = update.message.text
         context.user_data['phone_number'] = phone_number
 
         try:
             result = await self.image_searcher.mtproto_client.authenticate(phone_number)
             if result == "verification_needed":
+                keyboard = [[KeyboardButton("❌ Cancel")]]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+
                 await update.message.reply_text(
-                    "I've sent a verification code to your phone. "
-                    "Please enter the code:"
+                    "I've sent a verification code to your phone. Please enter the code:",
+                    reply_markup=reply_markup
                 )
                 return VERIFICATION_CODE
         except Exception as e:
-            await update.message.reply_text(f"Authentication failed: {str(e)}")
+            await update.message.reply_text(
+                f"Authentication failed: {str(e)}\nUse /authenticate to try again.",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return ConversationHandler.END
 
     async def verification_code_received(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle verification code input"""
+        if update.message.text == "❌ Cancel":
+            return await self.cancel(update, context)
+
         verification_code = update.message.text
         phone_number = context.user_data.get('phone_number')
 
@@ -146,16 +163,23 @@ class SourceBot:
             result = await self.image_searcher.mtproto_client.authenticate(phone_number, verification_code)
             if result == "authenticated":
                 await update.message.reply_text(
-                    "Authentication successful! You can now use the bot's features."
+                    "Authentication successful! You can now use the bot's features.",
+                    reply_markup=ReplyKeyboardRemove()
                 )
             return ConversationHandler.END
         except Exception as e:
-            await update.message.reply_text(f"Authentication failed: {str(e)}")
+            await update.message.reply_text(
+                f"Authentication failed: {str(e)}\nUse /authenticate to try again.",
+                reply_markup=ReplyKeyboardRemove()
+            )
             return ConversationHandler.END
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Cancel the conversation"""
-        await update.message.reply_text("Authentication cancelled.")
+        await update.message.reply_text(
+            "Authentication cancelled. Use /authenticate to start over.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return ConversationHandler.END
 
     async def add_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -258,9 +282,12 @@ class SourceBot:
 
             # Handle regular, edited, and scheduled posts
             message = None
+            is_edited_post = False
+            post_type = "unknown"
             if hasattr(update, 'edited_channel_post') and update.edited_channel_post:
                 message = update.edited_channel_post
                 post_type = "edited"
+                is_edited_post = True
             elif hasattr(update, 'channel_post') and update.channel_post:
                 message = update.channel_post
                 post_type = "regular"
@@ -278,22 +305,15 @@ class SourceBot:
             is_scheduled = getattr(message, 'forward_date', None) is not None or getattr(message, 'has_scheduled_date', False)
             logger.debug(f"Processing {post_type} channel post (scheduled: {is_scheduled})")
 
-            # Always get fresh message data to ensure we have the latest version
+            # We'll use the original message data rather than trying to get_messages
+            # The python-telegram-bot library doesn't have get_messages method
             try:
+                # Check if we can access this chat
                 chat = await context.bot.get_chat(channel_id)
-                fresh_message = await context.bot.get_messages(
-                    chat_id=channel_id,
-                    message_ids=message.message_id,
-                    scheduled=True
-                )
-                if fresh_message:
-                    message = fresh_message[0]
-                    logger.debug(f"Retrieved fresh message data (scheduled: {is_scheduled})")
-                else:
-                    logger.warning(f"Could not retrieve fresh data for message {message.message_id}")
+                logger.debug(f"Verified access to channel {channel_id}")
             except Exception as e:
-                logger.error(f"Failed to get fresh message data: {str(e)}")
-                # Continue with original message if fresh data retrieval fails
+                logger.error(f"Failed to access channel {channel_id}: {str(e)}")
+                # Continue with the process even if we can't get fresh chat data
 
             if self.start_time and message.date and message.date.timestamp() < self.start_time:
                 logger.debug(f"Skipping old message from before bot start: {message.message_id}")
@@ -314,6 +334,21 @@ class SourceBot:
 
             if not photo:
                 logger.debug("Post does not contain a photo")
+                return
+                
+            # Create a unique identifier for this post
+            post_id = f"{channel_id}:{message.message_id}"
+            
+            # Check if we've already edited this post
+            if post_id in self.edited_posts:
+                logger.info(f"Skipping already edited post {message.message_id} in channel {channel_id}")
+                return
+                
+            # If this is an edited post that we didn't edit, skip it (respect manual edits)
+            if is_edited_post and post_id not in self.edited_posts:
+                logger.info(f"Skipping manually edited post {message.message_id} in channel {channel_id}")
+                # Add to edited posts set to prevent future edit attempts
+                self.edited_posts.add(post_id)
                 return
 
             original_caption = message.caption or ""
@@ -348,9 +383,23 @@ class SourceBot:
             source = await self.image_searcher.search_image(context.bot, image_data)
 
             try:
+                # Initialize variables to avoid undefined references in error handling
+                new_caption = ""
+                
                 if source:
-                    escaped_url = source['source_url']  
-                    link_text = "*👉🏼 Автор*"
+                    escaped_url = source['source_url']
+                    author_nickname = source.get('author_nickname', '')
+                    
+                    # Create link text with author nickname if available
+                    if author_nickname == "BLUESKY_GENERIC_ATTRIBUTION":
+                        # Special handling for Bluesky with generic attribution
+                        link_text = "*Автор на Bluesky 💎*"
+                    elif author_nickname:
+                        # Escape any special characters in the nickname for MarkdownV2 format
+                        escaped_nickname = self.escape_markdown_v2(author_nickname)
+                        link_text = f"*by {escaped_nickname}*"
+                    else:
+                        link_text = "*by artist*"
 
                     # Log original caption with any existing links
                     logger.debug(f"Original caption before escaping: {original_caption}")
@@ -373,6 +422,8 @@ class SourceBot:
                         caption=new_caption,
                         parse_mode='MarkdownV2'
                     )
+                    # Add to edited posts set to prevent re-editing
+                    self.edited_posts.add(post_id)
                     logger.info(f"Successfully updated post {message.message_id} in channel {channel_id}")
                 else:
                     logger.info(f"No source found for message {message.message_id} in channel {channel_id}, leaving post unedited")
@@ -383,11 +434,16 @@ class SourceBot:
                     logger.error(f"Bot lacks edit permissions in channel {channel_id}")
                 elif "message is not modified" in error_message:
                     logger.info(f"Caption already contains the correct source in channel {channel_id}")
+                    # Add to edited posts set to prevent future re-edit attempts
+                    self.edited_posts.add(post_id)
                 elif "message to edit not found" in error_message:
                     logger.error(f"Message {message.message_id} not found in channel {channel_id}")
                 else:
                     logger.error(f"Failed to edit message in channel {channel_id}: {str(e)}")
-                    logger.debug(f"Failed caption content: {new_caption}")
+                    if 'new_caption' in locals():
+                        logger.debug(f"Failed caption content: {new_caption}")
+                    else:
+                        logger.debug("No caption content available")
 
         except Exception as e:
             logger.error(f"Error handling channel post: {str(e)}", exc_info=True)
