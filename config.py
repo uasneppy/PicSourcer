@@ -1,87 +1,146 @@
 import os
 import json
-from dotenv import load_dotenv
+from pathlib import Path
 from typing import List
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+# ==============================================================================
+# Directories
+# ==============================================================================
 
-# File to store monitored channels
-CHANNELS_FILE = 'monitored_channels.json'
+DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Load channels from file or environment variable
-def _load_channels() -> List[str]:
-    try:
-        if os.path.exists(CHANNELS_FILE):
-            with open(CHANNELS_FILE, 'r') as f:
-                channels = json.load(f)
-                return [str(channel) for channel in channels if str(channel).strip()]
-    except Exception as e:
-        print(f"Error loading channels from file: {e}")
+COOKIES_DIR = DATA_DIR / "cookies"
+COOKIES_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Fallback to environment variable if file doesn't exist or has an error
-    channels_str = os.getenv('MONITORED_CHANNELS', '')
-    return [channel.strip() for channel in channels_str.split(',') if channel.strip()]
+LOGS_DIR = DATA_DIR / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Save channels to file
-def _save_channels(channels: List[str]) -> None:
-    try:
-        with open(CHANNELS_FILE, 'w') as f:
-            json.dump(channels, f)
-    except Exception as e:
-        print(f"Error saving channels to file: {e}")
+SESSIONS_DIR = DATA_DIR / "sessions"
+SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Initialize channels from file or environment
-MONITORED_CHANNELS = _load_channels()
+# ==============================================================================
+# Telegram Bot
+# ==============================================================================
 
-# Logging Configuration
-LOG_LEVEL = 'DEBUG'
-LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
-# Image Configuration
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB maximum file size
+TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
+TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
 
-# Source Bot Configuration
-SOURCE_MESSAGE_ID = 761068064  # Message ID for source detection
-SOURCE_WAIT_TIMEOUT = 8  # Seconds to wait for source bot response
+# ==============================================================================
+# Persistent Files
+# ==============================================================================
 
-# Source URLs configuration
+CHANNELS_FILE = DATA_DIR / "monitored_channels.json"
+
+# ==============================================================================
+# Logging
+# ==============================================================================
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG")
+
+LOG_FORMAT = (
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
+# ==============================================================================
+# Image Processing
+# ==============================================================================
+
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+# ==============================================================================
+# Source Bot
+# ==============================================================================
+
+SOURCE_MESSAGE_ID = 761068064
+SOURCE_WAIT_TIMEOUT = 8
+
 SOURCE_DOMAINS = {
-    'e621': ['e621.net'],
-    'furaffinity': ['furaffinity.net', 'www.furaffinity.net', 'beta.furaffinity.net'],
-    'twitter': ['twitter.com', 'x.com', 'twitter.com/i/web', 'mobile.twitter.com'],
-    'bluesky': ['bsky.app', 'bsky.social']
+    "e621": [
+        "e621.net",
+    ],
+    "furaffinity": [
+        "furaffinity.net",
+        "www.furaffinity.net",
+        "beta.furaffinity.net",
+    ],
+    "twitter": [
+        "twitter.com",
+        "x.com",
+        "twitter.com/i/web",
+        "mobile.twitter.com",
+    ],
+    "bluesky": [
+        "bsky.app",
+        "bsky.social",
+    ],
 }
 
-# MTProto Configuration
-TELEGRAM_API_ID = os.getenv('TELEGRAM_API_ID')
-TELEGRAM_API_HASH = os.getenv('TELEGRAM_API_HASH')
+# ==============================================================================
+# Cookie Locations
+# ==============================================================================
+
+FURAFFINITY_COOKIES = COOKIES_DIR / "furaffinity_cookies.json"
+BLUESKY_COOKIES = COOKIES_DIR / "bluesky_cookies.json"
+
+# ==============================================================================
+# Channel Management
+# ==============================================================================
+
+def _load_channels() -> List[str]:
+    try:
+        if CHANNELS_FILE.exists():
+            with open(CHANNELS_FILE, "r") as f:
+                channels = json.load(f)
+                return [
+                    str(channel)
+                    for channel in channels
+                    if str(channel).strip()
+                ]
+    except Exception as e:
+        print(f"Error loading channels: {e}")
+
+    channels_str = os.getenv("MONITORED_CHANNELS", "")
+
+    return [
+        channel.strip()
+        for channel in channels_str.split(",")
+        if channel.strip()
+    ]
+
+
+def _save_channels(channels: List[str]) -> None:
+    try:
+        with open(CHANNELS_FILE, "w") as f:
+            json.dump(channels, f, indent=2)
+    except Exception as e:
+        print(f"Error saving channels: {e}")
+
+
+MONITORED_CHANNELS = _load_channels()
+
 
 def is_monitored_channel(channel_id: str) -> bool:
-    """Check if a channel is in the monitored list"""
     return channel_id in MONITORED_CHANNELS
 
-def add_monitored_channel(channel_id: str) -> None:
-    """Add a new channel to monitor"""
-    if channel_id not in MONITORED_CHANNELS:
-        MONITORED_CHANNELS.append(channel_id)
-        # Save to file for persistence
-        _save_channels(MONITORED_CHANNELS)
-        # Also update environment variable as backup
-        os.environ['MONITORED_CHANNELS'] = ','.join(MONITORED_CHANNELS)
 
 def get_monitored_channels() -> List[str]:
-    """Get list of monitored channel IDs"""
     return MONITORED_CHANNELS
 
+
+def add_monitored_channel(channel_id: str) -> None:
+    if channel_id not in MONITORED_CHANNELS:
+        MONITORED_CHANNELS.append(channel_id)
+        _save_channels(MONITORED_CHANNELS)
+
+
 def remove_monitored_channel(channel_id: str) -> None:
-    """Remove a channel from monitoring"""
     if channel_id in MONITORED_CHANNELS:
         MONITORED_CHANNELS.remove(channel_id)
-        # Save to file for persistence
         _save_channels(MONITORED_CHANNELS)
-        # Also update environment variable as backup
-        os.environ['MONITORED_CHANNELS'] = ','.join(MONITORED_CHANNELS)
