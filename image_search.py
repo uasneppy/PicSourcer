@@ -517,7 +517,32 @@ class ImageSearcher:
             twitter_url = 'https://' + twitter_url[7:]
             
         logger.debug(f"Normalized Twitter URL: {twitter_url}")
-        
+
+        # For /i/status/ID URLs, follow the redirect to get the canonical URL.
+        # Twitter redirects /i/status/ID -> /@username/status/ID without requiring login.
+        if '/i/status/' in twitter_url:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        twitter_url,
+                        headers={'User-Agent': 'Mozilla/5.0'},
+                        allow_redirects=True,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as resp:
+                        resolved = str(resp.url)
+                        redirect_match = re.search(
+                            r'(?:twitter\.com|x\.com)/([a-zA-Z0-9_]+)/status/', resolved
+                        )
+                        if redirect_match:
+                            candidate = redirect_match.group(1)
+                            if candidate not in ['i', 'user', 'search', 'home', 'explore']:
+                                logger.info(
+                                    f"Resolved Twitter username from redirect: {candidate}"
+                                )
+                                return candidate
+            except Exception as redir_err:
+                logger.debug(f"Redirect resolution failed for {twitter_url}: {redir_err}")
+
         # Try Selenium approach first
         try:
             logger.debug(f"Attempting to extract Twitter username using Selenium from {twitter_url}")
