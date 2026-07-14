@@ -28,6 +28,8 @@ import os
 # Define conversation states
 PHONE_NUMBER, VERIFICATION_CODE = range(2)
 
+EDITED_POSTS_FILE = 'edited_posts.json'
+
 class SourceBot:
     def __init__(self):
         self.image_searcher = ImageSearcher()
@@ -38,7 +40,30 @@ class SourceBot:
         self.authenticated_users = set()  
         self.BOT_PASSWORD = "mow"  
         self.stopped_channels = set()
-        self.edited_posts = set()  # Track posts that have been edited with source info
+        self.edited_posts = self._load_edited_posts()  # Track posts that have been edited with source info
+
+    def _load_edited_posts(self) -> set:
+        """Load the set of already-edited post IDs from disk."""
+        try:
+            if os.path.exists(EDITED_POSTS_FILE):
+                import json
+                with open(EDITED_POSTS_FILE, 'r') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        logger.info(f"Loaded {len(data)} edited post IDs from disk")
+                        return set(data)
+        except Exception as e:
+            logger.error(f"Failed to load edited posts from disk: {e}")
+        return set()
+
+    def _save_edited_posts(self) -> None:
+        """Persist the edited_posts set to disk so it survives restarts."""
+        try:
+            import json
+            with open(EDITED_POSTS_FILE, 'w') as f:
+                json.dump(list(self.edited_posts), f)
+        except Exception as e:
+            logger.error(f"Failed to save edited posts to disk: {e}")
 
         # Set up signal handlers
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
@@ -347,8 +372,9 @@ class SourceBot:
             # If this is an edited post that we didn't edit, skip it (respect manual edits)
             if is_edited_post and post_id not in self.edited_posts:
                 logger.info(f"Skipping manually edited post {message.message_id} in channel {channel_id}")
-                # Add to edited posts set to prevent future edit attempts
+                # Add to edited posts set to prevent future edit attempts, and persist
                 self.edited_posts.add(post_id)
+                self._save_edited_posts()
                 return
 
             original_caption = message.caption or ""
@@ -399,7 +425,11 @@ class SourceBot:
                         escaped_nickname = self.escape_markdown_v2(author_nickname)
                         link_text = f"*by {escaped_nickname}*"
                     else:
-                        link_text = "*by artist*"
+                        # Fall back to platform name so the link still reads naturally
+                        # (e.g. "on e621" / "on FurAffinity") instead of the generic "by artist"
+                        platform = self.image_searcher.get_source_name(escaped_url)
+                        escaped_platform = self.escape_markdown_v2(platform)
+                        link_text = f"*on {escaped_platform}*"
 
                     # Log original caption with any existing links
                     logger.debug(f"Original caption before escaping: {original_caption}")
@@ -416,14 +446,22 @@ class SourceBot:
 
                     logger.debug(f"Final caption with source attribution: {new_caption}")
 
+                    # Race-condition guard: if the post was manually edited while we were
+                    # doing the (slow) image search, the edit handler already added it to
+                    # edited_posts and returned.  We must not overwrite the user's changes.
+                    if post_id in self.edited_posts:
+                        logger.info(f"Post {message.message_id} was manually edited during processing, skipping source update")
+                        return
+
                     await context.bot.edit_message_caption(
                         chat_id=message.chat_id,
                         message_id=message.message_id,
                         caption=new_caption,
                         parse_mode='MarkdownV2'
                     )
-                    # Add to edited posts set to prevent re-editing
+                    # Add to edited posts set to prevent re-editing, and persist to disk
                     self.edited_posts.add(post_id)
+                    self._save_edited_posts()
                     logger.info(f"Successfully updated post {message.message_id} in channel {channel_id}")
                 else:
                     logger.info(f"No source found for message {message.message_id} in channel {channel_id}, leaving post unedited")
@@ -436,6 +474,7 @@ class SourceBot:
                     logger.info(f"Caption already contains the correct source in channel {channel_id}")
                     # Add to edited posts set to prevent future re-edit attempts
                     self.edited_posts.add(post_id)
+                    self._save_edited_posts()
                 elif "message to edit not found" in error_message:
                     logger.error(f"Message {message.message_id} not found in channel {channel_id}")
                 else:

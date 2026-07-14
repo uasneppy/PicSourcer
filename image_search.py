@@ -276,7 +276,13 @@ class ImageSearcher:
                                         # - conditional_dnp / conditional_use
                                         artist = re.sub(r'_\(artist\)$', '', artist)
                                         artist = re.sub(r'^conditional_[a-z_]+$', '', artist)
-                                        if artist.strip():  # Only add non-empty strings
+                                        # Skip known e621 meta-tags that are not real artist names
+                                        META_ARTIST_TAGS = {
+                                            'unknown_artist', 'anonymous_artist', 'avoid_posting',
+                                            'third-party_edit', 'sound_warning', 'epilepsy_warning',
+                                            'ai_generated', 'stable_diffusion', 'novelai',
+                                        }
+                                        if artist.strip() and artist.strip() not in META_ARTIST_TAGS:
                                             cleaned_artists.append(artist)
                                     
                                     if cleaned_artists:
