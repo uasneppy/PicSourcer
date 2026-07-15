@@ -656,7 +656,7 @@ class SourceBot:
         *Supported Platforms*
         • e621
         • FurAffinity
-        • Twitter/X
+        • X
         • Bluesky
 
         *Requirements*

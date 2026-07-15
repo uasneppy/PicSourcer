@@ -135,7 +135,7 @@ class ImageSearcher:
             found_urls = {
                 'e621': '',
                 'furaffinity': '',
-                'twitter': '',
+                'x': '',
                 'bluesky': ''
             }
 
@@ -178,8 +178,8 @@ class ImageSearcher:
                 logger.info(f"Prioritizing e621 URL: {found_urls['e621']}")
                 return found_urls['e621']
             
-            # Fallback to other platforms in this order: FurAffinity, Twitter, Bluesky
-            for platform in ['furaffinity', 'twitter', 'bluesky']:
+            # Fallback to other platforms in this order: FurAffinity, X, Bluesky
+            for platform in ['furaffinity', 'x', 'bluesky']:
                 if found_urls[platform]:
                     logger.info(f"Using {platform} URL: {found_urls[platform]}")
                     return found_urls[platform]
@@ -218,8 +218,8 @@ class ImageSearcher:
             domain_handlers = {
                 'e621.net': self._extract_e621_username,
                 'furaffinity.net': self._extract_furaffinity_username,
-                'twitter.com': self._extract_twitter_username,
-                'x.com': self._extract_twitter_username
+                'twitter.com': self._extract_x_username,
+                'x.com': self._extract_x_username
                 # Removed Bluesky handler as per request - will use generic attribution
             }
             
@@ -488,9 +488,9 @@ class ImageSearcher:
         # No username could be extracted
         return ""
         
-    async def _extract_twitter_username(self, url: str) -> str:
+    async def _extract_x_username(self, url: str) -> str:
         """
-        Extract username from Twitter/X URL using multiple methods
+        Extract username from X (formerly Twitter) URL using multiple methods
         This function tries Selenium first, then falls back to cloudscraper if needed
         """
         url_lower = url.lower()
@@ -501,36 +501,36 @@ class ImageSearcher:
         
         # If we got a valid username from the URL and it's not "user" (placeholder), return it directly
         if username_from_url and username_from_url != "user" and username_from_url not in ["i", "search", "home", "explore", "notifications", "messages"]:
-            logger.info(f"Successfully extracted Twitter username from URL: {username_from_url}")
+            logger.info(f"Successfully extracted X username from URL: {username_from_url}")
             return username_from_url
             
         # For tweets with "user" format URLs or tweets where the URL doesn't contain the username directly,
         # we need more advanced extraction
         # First, clean and normalize the URL
         # 1. Convert x.com/user URLs to x.com/i format
-        twitter_url = url.replace("/user/", "/i/")
+        x_url = url.replace("/user/", "/i/")
         
         # 2. If it's a standard tweet URL, normalize to i/status instead of just status
-        if '/status/' in twitter_url and '/i/status/' not in twitter_url:
-            twitter_url = twitter_url.replace('/status/', '/i/status/')
+        if '/status/' in x_url and '/i/status/' not in x_url:
+            x_url = x_url.replace('/status/', '/i/status/')
             
-        # 3. Handle mobile twitter URLs
-        if 'mobile.twitter.com' in twitter_url:
-            twitter_url = twitter_url.replace('mobile.twitter.com', 'twitter.com')
+        # 3. Handle mobile X URLs
+        if 'mobile.twitter.com' in x_url:
+            x_url = x_url.replace('mobile.twitter.com', 'x.com')
             
         # 4. Make sure to use https
-        if twitter_url.startswith('http://'):
-            twitter_url = 'https://' + twitter_url[7:]
+        if x_url.startswith('http://'):
+            x_url = 'https://' + x_url[7:]
             
-        logger.debug(f"Normalized Twitter URL: {twitter_url}")
+        logger.debug(f"Normalized X URL: {x_url}")
 
         # For /i/status/ID URLs, follow the redirect to get the canonical URL.
-        # Twitter redirects /i/status/ID -> /@username/status/ID without requiring login.
-        if '/i/status/' in twitter_url:
+        # X redirects /i/status/ID -> /@username/status/ID without requiring login.
+        if '/i/status/' in x_url:
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        twitter_url,
+                        x_url,
                         headers={'User-Agent': 'Mozilla/5.0'},
                         allow_redirects=True,
                         timeout=aiohttp.ClientTimeout(total=10)
@@ -543,24 +543,24 @@ class ImageSearcher:
                             candidate = redirect_match.group(1)
                             if candidate not in ['i', 'user', 'search', 'home', 'explore']:
                                 logger.info(
-                                    f"Resolved Twitter username from redirect: {candidate}"
+                                    f"Resolved X username from redirect: {candidate}"
                                 )
                                 return candidate
             except Exception as redir_err:
-                logger.debug(f"Redirect resolution failed for {twitter_url}: {redir_err}")
+                logger.debug(f"Redirect resolution failed for {x_url}: {redir_err}")
 
         # Try Selenium approach first
         try:
-            logger.debug(f"Attempting to extract Twitter username using Selenium from {twitter_url}")
-            username = await self._extract_twitter_username_with_selenium(twitter_url)
+            logger.debug(f"Attempting to extract X username using Selenium from {x_url}")
+            username = await self._extract_x_username_with_selenium(x_url)
             if username:
-                logger.info(f"Successfully extracted Twitter username with Selenium: {username}")
+                logger.info(f"Successfully extracted X username with Selenium: {username}")
                 return username
         except Exception as selenium_error:
-            logger.error(f"Selenium extraction for Twitter failed: {str(selenium_error)}")
+            logger.error(f"Selenium extraction for X failed: {str(selenium_error)}")
             
         # Fallback to cloudscraper if Selenium fails
-        logger.debug(f"Selenium extraction failed, trying cloudscraper for {twitter_url}")
+        logger.debug(f"Selenium extraction failed, trying cloudscraper for {x_url}")
         
         # Create a cloudscraper instance if we don't already have one
         if not hasattr(self, 'scraper') or self.scraper is None:
@@ -579,7 +579,7 @@ class ImageSearcher:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5',
-                'Referer': 'https://twitter.com/',
+                'Referer': 'https://x.com/',
                 'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
@@ -587,10 +587,14 @@ class ImageSearcher:
             
             # Try to find cookie files in multiple locations
             cookie_paths = [
-                os.path.join(os.path.dirname(__file__), 'twitter_cookies.json'),  # Same directory
-                os.path.join(os.path.dirname(__file__), 'cookies', 'twitter_cookies.json'),  # Cookies subdirectory
-                'twitter_cookies.json',  # Root directory
-                os.path.join('cookies', 'twitter_cookies.json')  # Cookies subdirectory from root
+                os.path.join(os.path.dirname(__file__), 'x_cookies.json'),  # Same directory (preferred)
+                os.path.join(os.path.dirname(__file__), 'twitter_cookies.json'),  # Legacy name
+                os.path.join(os.path.dirname(__file__), 'cookies', 'x_cookies.json'),  # Cookies subdirectory
+                os.path.join(os.path.dirname(__file__), 'cookies', 'twitter_cookies.json'),
+                'x_cookies.json',  # Root directory
+                'twitter_cookies.json',  # Legacy root
+                os.path.join('cookies', 'x_cookies.json'),
+                os.path.join('cookies', 'twitter_cookies.json')
             ]
             
             cookies_dict = {}
@@ -600,7 +604,7 @@ class ImageSearcher:
             for path in cookie_paths:
                 if os.path.exists(path):
                     cookie_file = path
-                    logger.debug(f"Found Twitter cookies at: {path}")
+                    logger.debug(f"Found X cookies at: {path}")
                     break
             
             if cookie_file:
@@ -614,7 +618,7 @@ class ImageSearcher:
                         cookies_json = json.loads(raw)
                     
                     if cookies_json and len(cookies_json) > 0:
-                        logger.debug(f"Loading {len(cookies_json)} Twitter cookies from {cookie_file}")
+                        logger.debug(f"Loading {len(cookies_json)} X cookies from {cookie_file}")
                         
                         # Check for required authentication cookies
                         auth_cookies = [c for c in cookies_json if c.get('name') in ['auth_token', 'ct0', 'twid']]
@@ -632,16 +636,16 @@ class ImageSearcher:
                     else:
                         logger.debug("Cookie file exists but is empty")
                 except Exception as e:
-                    logger.error(f"Error loading Twitter cookies: {str(e)}")
+                    logger.error(f"Error loading X cookies: {str(e)}")
             else:
-                logger.debug("No Twitter cookies file found. Create one using twitter_cookie_tool.py")
+                logger.debug("No X cookies file found. Create one using twitter_cookie_tool.py")
             
             loop = asyncio.get_event_loop()
             scraper = self.scraper if hasattr(self, 'scraper') else cloudscraper.create_scraper()
             response = await loop.run_in_executor(
                 None, 
                 lambda: scraper.get(
-                    twitter_url, 
+                    x_url, 
                     cookies=cookies_dict if cookies_dict else None,
                     headers=headers,
                     timeout=15
@@ -650,12 +654,12 @@ class ImageSearcher:
             
             if response.status_code == 200:
                 html = response.text
-                logger.debug("Successfully fetched Twitter HTML")
+                logger.debug("Successfully fetched X HTML")
                 
                 # Check if hit a login wall despite cookies
                 login_indicators = ["Log in", "login form", "password", "Sign in", "Sign up", "Create account", "to X to see"]
                 if any(indicator in html for indicator in login_indicators) and cookies_dict:
-                    logger.warning("Hit Twitter login wall despite cookies - possibly expired cookies")
+                    logger.warning("Hit X login wall despite cookies - possibly expired cookies")
                 
                 # Parse with BeautifulSoup
                 soup = BeautifulSoup(html, 'html.parser')
@@ -664,11 +668,11 @@ class ImageSearcher:
                 og_title = soup.select_one('meta[property="og:title"]')
                 if og_title and og_title.get('content'):
                     title_content = og_title.get('content', '')
-                    # Extract name from pattern like "Username on X/Twitter: "text" / X/Twitter"
+                    # Extract name from pattern like "Username on X: 'text' / X"
                     title_match = re.search(r'^([^(]+?)\s+on\s+(?:X|Twitter)', title_content)
                     if title_match:
                         username = title_match.group(1).strip()
-                        logger.info(f"Extracted Twitter username from og:title: {username}")
+                        logger.info(f"Extracted X username from og:title: {username}")
                         return username
                 
                 # Method 2: Try to find in canonical link
@@ -679,7 +683,7 @@ class ImageSearcher:
                     if canonical_match:
                         username = canonical_match.group(1)
                         if username != "user":
-                            logger.info(f"Extracted Twitter username from canonical URL: {username}")
+                            logger.info(f"Extracted X username from canonical URL: {username}")
                             return username
                 
                 # Method 3: Try to find author links
@@ -690,7 +694,7 @@ class ImageSearcher:
                         segments = href.split('/')
                         if len(segments) >= 2 and segments[1] and segments[1] not in ['search', 'settings', 'i']:
                             username = segments[1]
-                            logger.info(f"Extracted Twitter username from author link: {username}")
+                            logger.info(f"Extracted X username from author link: {username}")
                             return username
                 
                 # Method 4: Try to extract from JSON content in script tags
@@ -720,7 +724,7 @@ class ImageSearcher:
                                 
                             username = find_username_in_json(json_data)
                             if username:
-                                logger.info(f"Extracted Twitter username from JSON data: {username}")
+                                logger.info(f"Extracted X username from JSON data: {username}")
                                 return username
                         except Exception as json_error:
                             logger.debug(f"Error parsing JSON script: {str(json_error)}")
@@ -739,12 +743,12 @@ class ImageSearcher:
                             # Skip common UI elements that might match
                             if match.lower() in ['search', 'home', 'explore', 'notifications', 'messages', 'bookmarks']:
                                 continue
-                            logger.info(f"Extracted Twitter username using regex: {match}")
+                            logger.info(f"Extracted X username using regex: {match}")
                             return match
             else:
-                logger.warning(f"Failed to fetch Twitter page. Status code: {response.status_code}")
+                logger.warning(f"Failed to fetch X page. Status code: {response.status_code}")
         except Exception as e:
-            logger.error(f"Error fetching Twitter HTML: {str(e)}", exc_info=True)
+            logger.error(f"Error fetching X HTML: {str(e)}", exc_info=True)
         
         # Try to extract from URL one last time
         if username_from_url and username_from_url not in ["i", "search", "home", "explore", "notifications", "messages"]:
@@ -1216,9 +1220,9 @@ class ImageSearcher:
         
         return ""
         
-    async def _extract_twitter_username_with_selenium(self, url: str) -> str:
+    async def _extract_x_username_with_selenium(self, url: str) -> str:
         """
-        Use Selenium with headless Chrome to extract Twitter username with cookie support
+        Use Selenium with headless Chrome to extract X username with cookie support
         This method handles JavaScript-rendered content and can use cookies to bypass login
         """
         try:
@@ -1253,11 +1257,11 @@ class ImageSearcher:
                 for path in cookie_paths:
                     if os.path.exists(path):
                         cookie_file = path
-                        logger.debug(f"Found Twitter cookies for Selenium at: {path}")
+                        logger.debug(f"Found X cookies for Selenium at: {path}")
                         break
                 
                 # First navigate to the main site to set up cookies domain
-                driver.get("https://twitter.com")
+                driver.get("https://x.com")
                 
                 # Load cookies if available
                 if cookie_file:
@@ -1266,10 +1270,10 @@ class ImageSearcher:
                             cookies = json.load(f)
                         
                         if cookies:
-                            logger.debug(f"Loading {len(cookies)} Twitter cookies for Selenium")
+                            logger.debug(f"Loading {len(cookies)} X cookies for Selenium")
                             
                             # Determine the correct domain suffix
-                            domain_suffix = '.twitter.com' if 'twitter.com' in url else '.x.com'
+                            domain_suffix = '.x.com'
                             
                             for cookie in cookies:
                                 # Make sure cookie has all required fields for Selenium
@@ -1304,7 +1308,7 @@ class ImageSearcher:
                 driver.get(url)
                 
                 # Wait for the page to load essential content
-                logger.debug("Waiting for Twitter page to load using Selenium...")
+                logger.debug("Waiting for X page to load using Selenium...")
                 
                 # Let JavaScript execute and try to find author name in various patterns
                 time.sleep(3)  # Give a few seconds for JavaScript to execute
@@ -1316,12 +1320,12 @@ class ImageSearcher:
                     title_match = re.search(r'^([^(]+?)\s+on\s+(?:X|Twitter)', title)
                     if title_match:
                         username = title_match.group(1).strip()
-                        logger.info(f"Extracted Twitter username from title: {username}")
+                        logger.info(f"Extracted X username from title: {username}")
                         return username
                 
                 # Method 2: Extract from user links
                 try:
-                    # Twitter data-testid attributes
+                    # X data-testid attributes
                     username_elements = driver.find_elements(By.CSS_SELECTOR, '[data-testid="User-Name"]')
                     for element in username_elements:
                         # Try to get the username text
@@ -1332,7 +1336,7 @@ class ImageSearcher:
                                 span_text = span.text
                                 if span_text and span_text.startswith('@'):
                                     username = span_text[1:]  # Remove the @ symbol
-                                    logger.info(f"Extracted Twitter username from User-Name spans: {username}")
+                                    logger.info(f"Extracted X username from User-Name spans: {username}")
                                     return username
                         except Exception:
                             pass
@@ -1352,9 +1356,9 @@ class ImageSearcher:
                                 username_match = re.search(r'(?:twitter\.com|x\.com)/([a-zA-Z0-9_]+)$', href_lower)
                                 if username_match:
                                     username = username_match.group(1)
-                                    # Skip common Twitter UI elements
+                                    # Skip common X UI elements
                                     if username not in ['home', 'explore', 'notifications', 'messages', 'settings', 'i']:
-                                        logger.info(f"Extracted Twitter username from href: {username}")
+                                        logger.info(f"Extracted X username from href: {username}")
                                         return username
                 except Exception as link_error:
                     logger.debug(f"Error finding link elements: {str(link_error)}")
@@ -1368,13 +1372,13 @@ class ImageSearcher:
                             screen_name_match = re.search(r'"screen_name":"([^"]+)"', content)
                             if screen_name_match:
                                 username = screen_name_match.group(1)
-                                logger.info(f"Extracted Twitter username from script JSON: {username}")
+                                logger.info(f"Extracted X username from script JSON: {username}")
                                 return username
                 except Exception as script_error:
                     logger.debug(f"Error parsing scripts: {str(script_error)}")
                 
                 # If we got here, we couldn't find a username with Selenium
-                logger.debug("Could not extract Twitter username with Selenium")
+                logger.debug("Could not extract X username with Selenium")
                     
             finally:
                 # Always close the driver to free resources
@@ -1384,7 +1388,7 @@ class ImageSearcher:
                     logger.error(f"Error closing Selenium driver: {str(quit_error)}")
                     
         except Exception as selenium_error:
-            logger.error(f"Selenium error for Twitter: {str(selenium_error)}")
+            logger.error(f"Selenium error for X: {str(selenium_error)}")
             
         return ""
         
@@ -1395,7 +1399,7 @@ class ImageSearcher:
         if furaffinity_match:
             return furaffinity_match.group(1)
             
-        # Twitter pattern: "Username on X/Twitter: "Text""
+        # X pattern: "Username on X: "Text""
         twitter_match = re.search(r'^([^(]+?)\s+on\s+(?:X|Twitter)', title)
         if twitter_match:
             return twitter_match.group(1).strip()
@@ -1414,7 +1418,7 @@ class ImageSearcher:
                     if furaffinity_match:
                         return furaffinity_match.group(1)
                         
-                    # Twitter pattern: twitter.com/Username
+                    # X pattern: x.com/Username or twitter.com/Username
                     twitter_match = re.search(r'(?:twitter\.com|x\.com)/([a-zA-Z0-9_]+)$', href)
                     if twitter_match:
                         username = twitter_match.group(1)
@@ -1434,7 +1438,7 @@ class ImageSearcher:
                 if meta.get_attribute('name') == 'author':
                     return meta.get_attribute('content')
                     
-                # Check for Twitter card creator
+                # Check for X card creator
                 if meta.get_attribute('name') == 'twitter:creator':
                     creator = meta.get_attribute('content')
                     if creator.startswith('@'):
@@ -1450,7 +1454,7 @@ class ImageSearcher:
                         if fa_match:
                             return fa_match.group(1)
                             
-                        # Twitter pattern: "Username on X/Twitter: "Text""
+                        # X pattern: "Username on X: "Text""
                         twitter_match = re.search(r'^([^(]+?)\s+on\s+(?:X|Twitter)', title)
                         if twitter_match:
                             return twitter_match.group(1).strip()
