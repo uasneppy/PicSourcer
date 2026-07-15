@@ -1,0 +1,41 @@
+main_app-1  | 2026-07-15 12:00:37,525 - SourceBot - ERROR - Selenium error for FurAffinity: Message: timeout: Timed out receiving message from renderer: 18.855
+main_app-1  |   (Session info: chrome=150.0.7871.114)
+main_app-1  | Stacktrace:
+main_app-1  | #0 0x55ee65eeb402 
+main_app-1  | #1 0x55ee6585f668 
+main_app-1  | #2 0x55ee658452f8 
+main_app-1  | #3 0x55ee658450e5 
+main_app-1  | #4 0x55ee658432a2 
+main_app-1  | #5 0x55ee6584376a 
+main_app-1  | #6 0x55ee65859ee2 
+main_app-1  | #7 0x55ee6586f0c1 
+main_app-1  | #8 0x55ee6587694f 
+main_app-1  | #9 0x55ee65843d9c 
+main_app-1  | #10 0x55ee6586ecfa 
+main_app-1  | #11 0x55ee65904227 
+main_app-1  | #12 0x55ee658de537 
+main_app-1  | #13 0x55ee658a870e 
+main_app-1  | #14 0x55ee658a95a5 
+main_app-1  | #15 0x55ee65eadfaa 
+main_app-1  | #16 0x55ee65eac95c 
+main_app-1  | #17 0x55ee65eac34e 
+main_app-1  | #18 0x55ee65eacdd9 
+main_app-1  | #19 0x55ee65e9af49 
+main_app-1  | #20 0x55ee65ead18c 
+main_app-1  | #21 0x55ee65e854f9 
+main_app-1  | #22 0x55ee65ed62a9 
+main_app-1  | #23 0x55ee65ed6484 
+main_app-1  | #24 0x55ee65ee9cde 
+main_app-1  | #25 0x7f424b3f2b7b 
+main_app-1  | 
+main_app-1  | 2026-07-15 12:00:37,526 - SourceBot - DEBUG - Selenium extraction failed, trying cloudscraper for https://www.furaffinity.net/view/65128761
+main_app-1  | 2026-07-15 12:00:37,546 - SourceBot - DEBUG - Fetching FurAffinity page from https://www.furaffinity.net/view/65128761 using cloudscraper
+main_app-1  | 2026-07-15 12:00:37,546 - SourceBot - DEBUG - Found FurAffinity cookies at: /app/furaffinity_cookies.json
+main_app-1  | 2026-07-15 12:00:37,547 - SourceBot - ERROR - Error loading cookies: Expecting value: line 1 column 1 (char 0)
+main_app-1  | 2026-07-15 12:00:38,027 - SourceBot - DEBUG - Successfully fetched FurAffinity page HTML
+main_app-1  | 2026-07-15 12:00:38,042 - SourceBot - INFO - Found source for search_id 94732418090992: Furaffinity - https://www.furaffinity.net/view/65128761
+main_app-1  | 2026-07-15 12:00:38,042 - SourceBot - ERROR - Failed to edit message in channel -1002410174190: 'ImageSearcher' object has no attribute 'get_source_name'
+main_app-1  | 2026-07-15 12:00:38,042 - SourceBot - DEBUG - Failed caption content: 
+main_app-1  | 2026-07-15 13:48:18,512 - SourceBot - DEBUG - Processing regular channel post (scheduled: False)
+main_app-1  | 2026-07-15 13:48:18,622 - SourceBot - DEBUG - Verified access to channel -1002297658240
+main_app-1  | 2026-07-15 13:48:18,623 - SourceBot - DEBUG - Channel -1002297658240 is not in monitored list

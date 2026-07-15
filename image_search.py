@@ -365,7 +365,12 @@ class ImageSearcher:
             if cookie_file:
                 try:
                     with open(cookie_file, 'r') as f:
-                        cookies_json = json.load(f)
+                        raw = f.read().strip()
+                    if not raw:
+                        logger.debug(f"Cookie file {cookie_file} is empty, skipping")
+                        cookies_json = []
+                    else:
+                        cookies_json = json.loads(raw)
                     
                     if cookies_json and len(cookies_json) > 0:
                         logger.debug(f"Loading {len(cookies_json)} FurAffinity cookies from {cookie_file}")
@@ -600,7 +605,12 @@ class ImageSearcher:
             if cookie_file:
                 try:
                     with open(cookie_file, 'r') as f:
-                        cookies_json = json.load(f)
+                        raw = f.read().strip()
+                    if not raw:
+                        logger.debug(f"Cookie file {cookie_file} is empty, skipping")
+                        cookies_json = []
+                    else:
+                        cookies_json = json.loads(raw)
                     
                     if cookies_json and len(cookies_json) > 0:
                         logger.debug(f"Loading {len(cookies_json)} Twitter cookies from {cookie_file}")
