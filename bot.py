@@ -617,6 +617,111 @@ class SourceBot:
         )
         logger.info(f"Removed channel {channel_id} from monitoring list")
 
+    async def upload_cookies(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /upload_cookies command — explain how to send a cookie file."""
+        if not await self.check_auth(update):
+            return
+
+        instructions = (
+            "🍪 *Cookie Upload*\n\n"
+            "Send me a JSON cookie file exported from your browser "
+            "\\(e\\.g\\. via the *Cookie\\-Editor* extension\\)\\.\n\n"
+            "Name the file so the bot knows which platform it belongs to:\n"
+            "• `x_cookies\\.json` — for X \\(Twitter\\)\n"
+            "• `furaffinity_cookies\\.json` — for FurAffinity\n\n"
+            "The file must be a JSON array of cookie objects\\. "
+            "Send it as a *file attachment* \\(not as a photo\\)\\."
+        )
+        await update.message.reply_text(instructions, parse_mode='MarkdownV2')
+
+    async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Accept a JSON cookie file, detect the platform, validate, and save it."""
+        if not await self.check_auth(update):
+            return
+
+        doc = update.message.document
+        if not doc:
+            return
+
+        filename = doc.file_name or ""
+        if not filename.lower().endswith(".json"):
+            await update.message.reply_text(
+                "⚠️ Please send a `.json` file.",
+                parse_mode='MarkdownV2',
+            )
+            return
+
+        # Detect target platform from filename
+        name_lower = filename.lower()
+        if "furaffinity" in name_lower or name_lower.startswith("fa_"):
+            platform = "FurAffinity"
+            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "furaffinity_cookies.json")
+        elif any(k in name_lower for k in ("x_cookies", "twitter")):
+            platform = "X"
+            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "x_cookies.json")
+        else:
+            await update.message.reply_text(
+                "⚠️ Couldn't detect the platform from the filename\\.\n\n"
+                "Please rename the file to `x_cookies\\.json` or "
+                "`furaffinity_cookies\\.json` and send it again\\.",
+                parse_mode='MarkdownV2',
+            )
+            return
+
+        # Download
+        try:
+            tg_file = await context.bot.get_file(doc.file_id)
+            raw_bytes = await tg_file.download_as_bytearray()
+            raw_text = raw_bytes.decode("utf-8")
+        except Exception as e:
+            logger.error(f"Failed to download cookie file: {e}", exc_info=True)
+            await update.message.reply_text("❌ Failed to download the file. Please try again.")
+            return
+
+        # Validate JSON
+        try:
+            cookies = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            await update.message.reply_text(f"❌ Invalid JSON: {e}")
+            return
+
+        if not isinstance(cookies, list):
+            await update.message.reply_text(
+                "❌ The file must contain a JSON *array* of cookie objects\\.",
+                parse_mode='MarkdownV2',
+            )
+            return
+
+        if len(cookies) == 0:
+            await update.message.reply_text("⚠️ The cookie list is empty — nothing saved.")
+            return
+
+        # Sanity-check a few entries look like cookies
+        sample = cookies[0] if cookies else {}
+        if not isinstance(sample, dict) or "name" not in sample:
+            await update.message.reply_text(
+                "❌ Entries don't look like cookie objects "
+                "\\(expected `{\"name\": ..., \"value\": ...}` objects\\)\\.",
+                parse_mode='MarkdownV2',
+            )
+            return
+
+        # Save
+        try:
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(cookies, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save cookie file to {save_path}: {e}", exc_info=True)
+            await update.message.reply_text("❌ Failed to save the file on the server. Check bot logs.")
+            return
+
+        logger.info(f"Cookies updated for {platform}: {len(cookies)} cookies saved to {save_path}")
+        await update.message.reply_text(
+            f"✅ Saved *{len(cookies)} cookies* for *{platform}*\\.\n"
+            f"The bot will use them on the next search\\.",
+            parse_mode='MarkdownV2',
+        )
+
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /help command"""
         if not await self.check_auth(update):
@@ -645,6 +750,7 @@ class SourceBot:
         *Bot Control*
         • `/start` - Initialize bot
         • `/pause` - Toggle all updates on/off
+        • `/upload_cookies` - Upload X or FurAffinity cookies
         • `/help` - Show this help
 
         *Automatic Features*
@@ -720,6 +826,11 @@ class SourceBot:
             self.application.add_handler(CommandHandler("stop", self.stop_channel))
             self.application.add_handler(CommandHandler("resume", self.resume_channel))
             self.application.add_handler(CommandHandler("help", self.help_command))
+            self.application.add_handler(CommandHandler("upload_cookies", self.upload_cookies))
+            self.application.add_handler(MessageHandler(
+                filters.ChatType.PRIVATE & filters.Document.MimeType("application/json"),
+                self.handle_document,
+            ))
             self.application.add_handler(MessageHandler(
                 (filters.ChatType.CHANNEL & filters.PHOTO) | 
                 (filters.ChatType.CHANNEL & filters.UpdateType.EDITED_CHANNEL_POST),
