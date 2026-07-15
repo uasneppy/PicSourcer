@@ -1,6 +1,8 @@
 import signal
 import asyncio
 import time
+import json
+import re
 import aiohttp
 from telegram.ext import (
     Application,
@@ -42,11 +44,16 @@ class SourceBot:
         self.stopped_channels = set()
         self.edited_posts = self._load_edited_posts()  # Track posts that have been edited with source info
 
+        # Set up signal handlers
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(sig, self._signal_handler)
+
+        logger.info("Bot initialized with enhanced service support")
+
     def _load_edited_posts(self) -> set:
         """Load the set of already-edited post IDs from disk."""
         try:
             if os.path.exists(EDITED_POSTS_FILE):
-                import json
                 with open(EDITED_POSTS_FILE, 'r') as f:
                     data = json.load(f)
                     if isinstance(data, list):
@@ -59,17 +66,10 @@ class SourceBot:
     def _save_edited_posts(self) -> None:
         """Persist the edited_posts set to disk so it survives restarts."""
         try:
-            import json
             with open(EDITED_POSTS_FILE, 'w') as f:
                 json.dump(list(self.edited_posts), f)
         except Exception as e:
             logger.error(f"Failed to save edited posts to disk: {e}")
-
-        # Set up signal handlers
-        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-            signal.signal(sig, self._signal_handler)
-
-        logger.info("Bot initialized with enhanced service support")
 
     def _signal_handler(self, signum, frame):
         """Handle system signals for clean shutdown"""
@@ -494,7 +494,6 @@ class SourceBot:
 
         # First, temporarily replace markdown links with placeholders
         links = []
-        import re
         pattern = r'\[(.*?)\]\((.*?)\)'
 
         def replace_link(match):
