@@ -427,7 +427,7 @@ class SourceBot:
                     else:
                         # Fall back to platform name so the link still reads naturally
                         # (e.g. "on e621" / "on FurAffinity") instead of the generic "by artist"
-                        platform = self.image_searcher.get_source_name(escaped_url)
+                        platform = self.image_searcher._get_source_name(escaped_url)
                         escaped_platform = self.escape_markdown_v2(platform)
                         link_text = f"*on {escaped_platform}*"
 
