@@ -10,3 +10,4 @@ pytz
 tzlocal
 urllib3
 six
+cloudscraper
