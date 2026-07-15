@@ -70,9 +70,9 @@ SOURCE_DOMAINS = {
         "www.furaffinity.net",
         "beta.furaffinity.net",
     ],
-    "twitter": [
-        "twitter.com",
+    "x": [
         "x.com",
+        "twitter.com",
         "twitter.com/i/web",
         "mobile.twitter.com",
     ],
