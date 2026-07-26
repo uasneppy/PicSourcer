@@ -15,8 +15,6 @@ ENV_FILE="${SCRIPT_DIR}/.env"
 # Check for required environment variables
 required_vars=(
     "TELEGRAM_BOT_TOKEN"
-    "TELEGRAM_API_ID"
-    "TELEGRAM_API_HASH"
 )
 
 # Check if .env file exists
@@ -55,10 +53,11 @@ if systemctl is-enabled --quiet ${SERVICE_NAME}; then
     systemctl disable ${SERVICE_NAME}
 fi
 
-# Copy service file
+# Render the service file with this install's directory, then install it
 echo "Installing service file..."
-cp "${SCRIPT_DIR}/${SERVICE_FILE}" /etc/systemd/system/ || {
-    echo "Failed to copy service file"
+sed "s|__WORKDIR__|${SCRIPT_DIR}|g" "${SCRIPT_DIR}/${SERVICE_FILE}" \
+    > "/etc/systemd/system/${SERVICE_FILE}" || {
+    echo "Failed to install service file"
     exit 1
 }
 

@@ -1,26 +1,21 @@
 [Unit]
-Description=Telegram Source Bot Service
-After=network.target
+Description=PicSourcer Telegram Source Bot
+After=network-online.target
 Wants=network-online.target
-AssertPathExists=/home/runner/${REPL_SLUG}
 
 [Service]
 Type=simple
-User=runner
-WorkingDirectory=/home/runner/${REPL_SLUG}
+# __WORKDIR__ is substituted with the install directory by install_service.sh.
+WorkingDirectory=__WORKDIR__
+EnvironmentFile=__WORKDIR__/.env
 Environment=PYTHONUNBUFFERED=1
-Environment=PATH=/nix/var/nix/profiles/default/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-EnvironmentFile=/home/runner/${REPL_SLUG}/.env
-ExecStart=/usr/bin/python3 bot.py
+ExecStart=__WORKDIR__/venv/bin/python bot.py
 Restart=always
 RestartSec=10
 TimeoutStartSec=60
 TimeoutStopSec=30
 KillMode=mixed
-
 NoNewPrivileges=true
-ProtectSystem=full
-ProtectHome=read-only
 
 [Install]
 WantedBy=multi-user.target

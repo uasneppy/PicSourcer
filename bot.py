@@ -3,32 +3,26 @@ import asyncio
 import time
 import json
 import re
-import aiohttp
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     filters,
     ContextTypes,
-    ConversationHandler
 )
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from telegram import Update
 from config import (
-    TELEGRAM_BOT_TOKEN, 
-    is_monitored_channel, 
+    TELEGRAM_BOT_TOKEN,
+    is_monitored_channel,
     add_monitored_channel,
-    remove_monitored_channel,  
+    remove_monitored_channel,
     get_monitored_channels,
-    SOURCE_MESSAGE_ID
 )
 from image_search import ImageSearcher
 from utils import download_image
 from logger import logger
 import sys
 import os
-
-# Define conversation states
-PHONE_NUMBER, VERIFICATION_CODE = range(2)
 
 EDITED_POSTS_FILE = 'edited_posts.json'
 
@@ -106,13 +100,13 @@ class SourceBot:
             "⚠️ Please authenticate first using:\n"
             "/password <password>\n\n"
             "After authentication, you can:\n"
-            "1. Use /authenticate to set up Telegram authentication\n"
-            "2. Use /add_channel to start monitoring channels\n"
-            "3. Use /delete_channel to remove channels from monitoring\n"
-            "4. Use /pause to temporarily stop processing\n"
-            "5. Use /list_channels to see monitored channels\n"
-            "6. Use /stop <channel_id> to stop updates for a specific channel\n"
-            "7. Use /resume <channel_id> to resume updates for a specific channel"
+            "1. Use /add_channel to start monitoring channels\n"
+            "2. Use /delete_channel to remove channels from monitoring\n"
+            "3. Use /pause to temporarily stop processing\n"
+            "4. Use /list_channels to see monitored channels\n"
+            "5. Use /stop <channel_id> to stop updates for a specific channel\n"
+            "6. Use /resume <channel_id> to resume updates for a specific channel\n\n"
+            "Sources are found automatically via the Fluffle reverse-image search."
         )
 
     async def handle_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -131,81 +125,6 @@ class SourceBot:
         else:
             await update.message.reply_text("Invalid password. Please try again.")
             logger.warning(f"Failed password attempt from user {user_id}")
-
-    async def authenticate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Start authentication process"""
-        if not await self.check_auth(update):
-            return ConversationHandler.END
-
-        if await self.image_searcher.mtproto_client.is_authenticated():
-            await update.message.reply_text("Already authenticated!")
-            return ConversationHandler.END
-
-        keyboard = [[KeyboardButton("❌ Cancel")]]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-
-        await update.message.reply_text(
-            "Please enter your phone number (including country code, e.g., +1234567890):",
-            reply_markup=reply_markup
-        )
-        return PHONE_NUMBER
-
-    async def phone_number_received(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle phone number input"""
-        if update.message.text == "❌ Cancel":
-            return await self.cancel(update, context)
-
-        phone_number = update.message.text
-        context.user_data['phone_number'] = phone_number
-
-        try:
-            result = await self.image_searcher.mtproto_client.authenticate(phone_number)
-            if result == "verification_needed":
-                keyboard = [[KeyboardButton("❌ Cancel")]]
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-
-                await update.message.reply_text(
-                    "I've sent a verification code to your phone. Please enter the code:",
-                    reply_markup=reply_markup
-                )
-                return VERIFICATION_CODE
-        except Exception as e:
-            await update.message.reply_text(
-                f"Authentication failed: {str(e)}\nUse /authenticate to try again.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return ConversationHandler.END
-
-    async def verification_code_received(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle verification code input"""
-        if update.message.text == "❌ Cancel":
-            return await self.cancel(update, context)
-
-        verification_code = update.message.text
-        phone_number = context.user_data.get('phone_number')
-
-        try:
-            result = await self.image_searcher.mtproto_client.authenticate(phone_number, verification_code)
-            if result == "authenticated":
-                await update.message.reply_text(
-                    "Authentication successful! You can now use the bot's features.",
-                    reply_markup=ReplyKeyboardRemove()
-                )
-            return ConversationHandler.END
-        except Exception as e:
-            await update.message.reply_text(
-                f"Authentication failed: {str(e)}\nUse /authenticate to try again.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return ConversationHandler.END
-
-    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Cancel the conversation"""
-        await update.message.reply_text(
-            "Authentication cancelled. Use /authenticate to start over.",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
 
     async def add_channel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /add_channel command"""
@@ -288,15 +207,6 @@ class SourceBot:
                 message += f"📺 *Unknown Channel*\n   ID: `{channel}`\n   Status: {status}\n\n"
 
         await update.message.reply_text(message, parse_mode='MarkdownV2')
-
-    async def handle_bot_response(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle responses from source detection"""
-        if not await self.check_auth(update):
-            return
-
-        if update.message and update.message.reply_to_message:
-            if update.message.reply_to_message.message_id == SOURCE_MESSAGE_ID:
-                await self.image_searcher.handle_bot_response(update.message.text)
 
     async def handle_channel_post(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle new channel posts"""
@@ -405,7 +315,7 @@ class SourceBot:
                 logger.error(f"Failed to download image from channel {channel_id}")
                 return
 
-            logger.debug(f"Sending image to FindFurryPicBot from channel {channel_id}")
+            logger.debug(f"Searching Fluffle for source of image from channel {channel_id}")
             source = await self.image_searcher.search_image(context.bot, image_data)
 
             try:
@@ -426,8 +336,9 @@ class SourceBot:
                         link_text = f"*by {escaped_nickname}*"
                     else:
                         # Fall back to platform name so the link still reads naturally
-                        # (e.g. "on e621" / "on FurAffinity") instead of the generic "by artist"
-                        platform = self.image_searcher._get_source_name(escaped_url)
+                        # (e.g. "on e621" / "on Fur Affinity") instead of the generic "by artist".
+                        # Fluffle already gives us the platform name in the result.
+                        platform = source.get('source_name') or 'Source'
                         escaped_platform = self.escape_markdown_v2(platform)
                         link_text = f"*on {escaped_platform}*"
 
@@ -617,111 +528,6 @@ class SourceBot:
         )
         logger.info(f"Removed channel {channel_id} from monitoring list")
 
-    async def upload_cookies(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle the /upload_cookies command — explain how to send a cookie file."""
-        if not await self.check_auth(update):
-            return
-
-        instructions = (
-            "🍪 *Cookie Upload*\n\n"
-            "Send me a JSON cookie file exported from your browser "
-            "\\(e\\.g\\. via the *Cookie\\-Editor* extension\\)\\.\n\n"
-            "Name the file so the bot knows which platform it belongs to:\n"
-            "• `x_cookies\\.json` — for X \\(Twitter\\)\n"
-            "• `furaffinity_cookies\\.json` — for FurAffinity\n\n"
-            "The file must be a JSON array of cookie objects\\. "
-            "Send it as a *file attachment* \\(not as a photo\\)\\."
-        )
-        await update.message.reply_text(instructions, parse_mode='MarkdownV2')
-
-    async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Accept a JSON cookie file, detect the platform, validate, and save it."""
-        if not await self.check_auth(update):
-            return
-
-        doc = update.message.document
-        if not doc:
-            return
-
-        filename = doc.file_name or ""
-        if not filename.lower().endswith(".json"):
-            await update.message.reply_text(
-                "⚠️ Please send a `.json` file.",
-                parse_mode='MarkdownV2',
-            )
-            return
-
-        # Detect target platform from filename
-        name_lower = filename.lower()
-        if "furaffinity" in name_lower or name_lower.startswith("fa_"):
-            platform = "FurAffinity"
-            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "furaffinity_cookies.json")
-        elif any(k in name_lower for k in ("x_cookies", "twitter")):
-            platform = "X"
-            save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "x_cookies.json")
-        else:
-            await update.message.reply_text(
-                "⚠️ Couldn't detect the platform from the filename\\.\n\n"
-                "Please rename the file to `x_cookies\\.json` or "
-                "`furaffinity_cookies\\.json` and send it again\\.",
-                parse_mode='MarkdownV2',
-            )
-            return
-
-        # Download
-        try:
-            tg_file = await context.bot.get_file(doc.file_id)
-            raw_bytes = await tg_file.download_as_bytearray()
-            raw_text = raw_bytes.decode("utf-8")
-        except Exception as e:
-            logger.error(f"Failed to download cookie file: {e}", exc_info=True)
-            await update.message.reply_text("❌ Failed to download the file. Please try again.")
-            return
-
-        # Validate JSON
-        try:
-            cookies = json.loads(raw_text)
-        except json.JSONDecodeError as e:
-            await update.message.reply_text(f"❌ Invalid JSON: {e}")
-            return
-
-        if not isinstance(cookies, list):
-            await update.message.reply_text(
-                "❌ The file must contain a JSON *array* of cookie objects\\.",
-                parse_mode='MarkdownV2',
-            )
-            return
-
-        if len(cookies) == 0:
-            await update.message.reply_text("⚠️ The cookie list is empty — nothing saved.")
-            return
-
-        # Sanity-check a few entries look like cookies
-        sample = cookies[0] if cookies else {}
-        if not isinstance(sample, dict) or "name" not in sample:
-            await update.message.reply_text(
-                "❌ Entries don't look like cookie objects "
-                "\\(expected `{\"name\": ..., \"value\": ...}` objects\\)\\.",
-                parse_mode='MarkdownV2',
-            )
-            return
-
-        # Save
-        try:
-            with open(save_path, "w", encoding="utf-8") as f:
-                json.dump(cookies, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save cookie file to {save_path}: {e}", exc_info=True)
-            await update.message.reply_text("❌ Failed to save the file on the server. Check bot logs.")
-            return
-
-        logger.info(f"Cookies updated for {platform}: {len(cookies)} cookies saved to {save_path}")
-        await update.message.reply_text(
-            f"✅ Saved *{len(cookies)} cookies* for *{platform}*\\.\n"
-            f"The bot will use them on the next search\\.",
-            parse_mode='MarkdownV2',
-        )
-
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /help command"""
         if not await self.check_auth(update):
@@ -733,12 +539,10 @@ class SourceBot:
         *Getting Started*
         1. Add bot to your channel as admin
         2. Get channel ID from @userinfobot (should start with -100)
-        3. Complete authentication steps below
+        3. Authenticate with the password below
 
-        *Authentication Commands*
-        • `/password <password>` - Initial bot access authentication
-        • `/authenticate` - Set up MTProto for source detection
-        • `/cancel` - Cancel authentication process
+        *Authentication*
+        • `/password <password>` - Bot access authentication
 
         *Channel Management*
         • `/add_channel <channel_id>` - Start monitoring channel
@@ -750,27 +554,29 @@ class SourceBot:
         *Bot Control*
         • `/start` - Initialize bot
         • `/pause` - Toggle all updates on/off
-        • `/upload_cookies` - Upload X or FurAffinity cookies
         • `/help` - Show this help
 
         *Automatic Features*
         • Image Detection: Monitors new posts with images
-        • Source Finding: Searches across multiple platforms
+        • Source Finding: Fluffle reverse-image search
         • Caption Edit: Adds source links automatically
         • Rate Limiting: Prevents API overload
 
         *Supported Platforms*
         • e621
-        • FurAffinity
-        • X
+        • Fur Affinity
+        • Weasyl
+        • Inkbunny
+        • Furry Network
+        • DeviantArt
+        • Twitter (X)
         • Bluesky
 
         *Requirements*
         • Bot must be channel admin
         • Edit messages permission required
         • Channel ID must start with -100
-        • Initial password authentication
-        • MTProto authentication
+        • Password authentication
 
         *Channel Status Icons*
         • 🟢 Active: Processing images
@@ -778,7 +584,6 @@ class SourceBot:
 
         *Tips*
         • Use /list_channels to monitor status
-        • Check both auth steps are complete
         • Ensure proper admin permissions
         • Source links appear below captions
 
@@ -807,44 +612,25 @@ class SourceBot:
             self.start_time = time.time()
             logger.info(f"Bot starting at timestamp: {self.start_time}")
 
-            conv_handler = ConversationHandler(
-                entry_points=[CommandHandler('authenticate', self.authenticate)],
-                states={
-                    PHONE_NUMBER: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.phone_number_received)],
-                    VERIFICATION_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.verification_code_received)],
-                },
-                fallbacks=[CommandHandler('cancel', self.cancel)]
-            )
-
-            self.application.add_handler(conv_handler)
             self.application.add_handler(CommandHandler("start", self.start))
             self.application.add_handler(CommandHandler("password", self.handle_password))
             self.application.add_handler(CommandHandler("add_channel", self.add_channel))
-            self.application.add_handler(CommandHandler("delete_channel", self.delete_channel))  
+            self.application.add_handler(CommandHandler("delete_channel", self.delete_channel))
             self.application.add_handler(CommandHandler("list_channels", self.list_channels))
             self.application.add_handler(CommandHandler("pause", self.pause_bot))
             self.application.add_handler(CommandHandler("stop", self.stop_channel))
             self.application.add_handler(CommandHandler("resume", self.resume_channel))
             self.application.add_handler(CommandHandler("help", self.help_command))
-            self.application.add_handler(CommandHandler("upload_cookies", self.upload_cookies))
             self.application.add_handler(MessageHandler(
-                filters.ChatType.PRIVATE & filters.Document.MimeType("application/json"),
-                self.handle_document,
-            ))
-            self.application.add_handler(MessageHandler(
-                (filters.ChatType.CHANNEL & filters.PHOTO) | 
+                (filters.ChatType.CHANNEL & filters.PHOTO) |
                 (filters.ChatType.CHANNEL & filters.UpdateType.EDITED_CHANNEL_POST),
                 self.handle_channel_post
-            ))
-            self.application.add_handler(MessageHandler(
-                filters.ChatType.PRIVATE & filters.TEXT,
-                self.handle_bot_response
             ))
 
             self.application.add_error_handler(self.error_handler)
 
             asyncio.get_event_loop().run_until_complete(self.image_searcher.start())
-            logger.info("MTProto client initialized")
+            logger.info("Image searcher (Fluffle) initialized")
 
             pid = os.getpid()
             with open('/tmp/telegram_bot.pid', 'w') as f:
