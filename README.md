@@ -1,13 +1,13 @@
 # Source Bot
 
 ## 🤖 About
-Source Bot is an advanced Telegram bot designed to monitor channels, detect images, and automatically find and add source links to posts. With support for multiple platforms, it ensures proper attribution and enhances content management.
+Source Bot is a Telegram bot that monitors channels, detects images, and automatically finds and adds source links to posts. Reverse-image search is powered by the [Fluffle](https://fluffle.xyz) API, so proper artist attribution is added to your posts with no manual scraping.
 
 ## 🚀 Features
 ### 🔍 Automatic Source Detection
 - Scans new posts with images
-- Searches across multiple platforms for the original source
-- Automatically edits captions to include source links
+- Reverse-searches each image with the Fluffle API
+- Automatically edits captions to include the source link and artist
 
 ### 📡 Channel Management
 - Add and remove monitored channels
@@ -15,16 +15,20 @@ Source Bot is an advanced Telegram bot designed to monitor channels, detect imag
 
 ### 🔒 Authentication
 - Secure access with password authentication
-- Uses MTProto authentication for source detection
 
 ### ⚙️ Supported Platforms
+Whatever Fluffle indexes, including:
 - e621
-- FurAffinity
-- Twitter/X
+- Fur Affinity
+- Weasyl
+- Inkbunny
+- Furry Network
+- DeviantArt
+- Twitter (X)
 - Bluesky
 
 ### 🛡️ Rate Limiting
-- Prevents excessive API usage to ensure stability
+- Serialises requests and paces them to respect Fluffle's one-request-at-a-time policy
 
 ---
 
@@ -52,35 +56,43 @@ pip3 install -r requirements.txt
 ```
 
 ### 2️⃣ Configure the Bot
-```bash
-nano config.py
-```
-- Enter `API_HASH`, `API_ID`, and `Bot Token`.
-- Press `CTRL+X`, then `Y`, then `ENTER` to save.
+The bot is configured with environment variables (a `.env` file in the project
+directory is loaded automatically). At minimum set your bot token:
 
 ```bash
-nano bot.py
+# .env
+TELEGRAM_BOT_TOKEN=123456:your-bot-token-here
+
+# Optional — Fluffle tuning (sensible defaults are built in):
+# Identify your app to Fluffle (required by their usage policy):
+FLUFFLE_USER_AGENT=PicSourcer/2.0 (by yourname on GitHub)
+# Include adult results (default true; needed for most furry art + all Twitter/Bluesky):
+FLUFFLE_INCLUDE_NSFW=true
+# Confidence tiers that are trusted enough to auto-edit a caption (default exact,tossUp):
+FLUFFLE_ACCEPTED_MATCHES=exact,tossUp
+# Restrict to specific platforms (comma-separated; empty = all):
+# FLUFFLE_PLATFORMS=e621,Fur Affinity,Twitter
 ```
-- Change your password (`self.BOT_PASSWORD = ""`).
-- Press `CTRL+X`, then `Y`, then `ENTER` to save.
+
+Set your bot password by editing `self.BOT_PASSWORD` in `bot.py`.
 
 ### 3️⃣ Start the Bot
 ```bash
 python3 bot.py
 ```
-Everything should run perfectly fine. If any problems arise, search Google for solutions—they should be easily fixable.
+
+You can also run it with Docker — the image no longer needs a headless browser:
+```bash
+docker build -t picsourcer . && docker run --env-file .env picsourcer
+```
 
 ---
 
 ## 🎮 How to Use the Bot
 ### 1️⃣ Authenticate Yourself
-Use a blank Telegram account, not your main one!
-
-Start `@FindFurryPicBot`. Then:
+Start the bot in Telegram, then:
 ```plaintext
 /password <password>   # Authenticate with the bot's password
-/authenticate         # Set up MTProto for source detection
-/cancel               # Cancel authentication process if needed
 ```
 
 ### 2️⃣ Add a Channel for Monitoring
@@ -113,9 +125,10 @@ Start `@FindFurryPicBot`. Then:
 
 ## 🔧 Troubleshooting & Tips
 - Use `/list_channels` to check active channels.
-- Ensure both authentication steps are completed.
 - Verify the bot has the necessary admin permissions.
 - Source links appear below captions in monitored channels.
+- If most posts get no source, make sure `FLUFFLE_INCLUDE_NSFW=true`.
+- Set a descriptive `FLUFFLE_USER_AGENT` so Fluffle can identify your app.
 
 ---
 
@@ -127,4 +140,4 @@ If you encounter any issues, contact the bot administrator for support.
 ---
 
 ## 📢 Credits
-@FindFurryPicBot on Telegram for an amazing pic sourcer. Give it a try on its own and tip the author! I will be donating monthly to support their work. 😊
+Reverse-image search is powered by [Fluffle](https://fluffle.xyz) — a reverse image search service tailored to the furry community. Please use the API responsibly and set an identifiable `FLUFFLE_USER_AGENT`.

@@ -14,23 +14,14 @@ load_dotenv()
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-COOKIES_DIR = DATA_DIR / "cookies"
-COOKIES_DIR.mkdir(parents=True, exist_ok=True)
-
 LOGS_DIR = DATA_DIR / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
-
-SESSIONS_DIR = DATA_DIR / "sessions"
-SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ==============================================================================
 # Telegram Bot
 # ==============================================================================
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-
-TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
-TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
 
 # ==============================================================================
 # Persistent Files
@@ -52,42 +43,94 @@ LOG_FORMAT = (
 # Image Processing
 # ==============================================================================
 
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB (Telegram download cap)
 
 # ==============================================================================
-# Source Bot
+# Fluffle Reverse-Image Search  (https://api.fluffle.xyz/v1/search)
 # ==============================================================================
+# Fluffle replaces both the old @FindFurryPicBot MTProto search and the per-site
+# scraping: a single request returns the source URL, platform and artist credits.
 
-SOURCE_MESSAGE_ID = 761068064
-SOURCE_WAIT_TIMEOUT = 8
+# Fluffle requires every client to identify itself with a descriptive User-Agent
+# of the form "applicationName/applicationVersion (by yourName on somePlatform)".
+FLUFFLE_API_URL = os.getenv("FLUFFLE_API_URL", "https://api.fluffle.xyz/v1/search")
+FLUFFLE_USER_AGENT = os.getenv(
+    "FLUFFLE_USER_AGENT",
+    "PicSourcer/2.0 (by uasneppy on GitHub)",
+)
 
-SOURCE_DOMAINS = {
-    "e621": [
-        "e621.net",
-    ],
-    "furaffinity": [
-        "furaffinity.net",
-        "www.furaffinity.net",
-        "beta.furaffinity.net",
-    ],
-    "x": [
-        "x.com",
-        "twitter.com",
-        "twitter.com/i/web",
-        "mobile.twitter.com",
-    ],
-    "bluesky": [
-        "bsky.app",
-        "bsky.social",
-    ],
+# Furry art is predominantly adult, so include NSFW results by default — otherwise
+# most posts return no match. Fluffle also treats every Twitter/Bluesky result as
+# explicit, so those need this enabled too.
+FLUFFLE_INCLUDE_NSFW = os.getenv("FLUFFLE_INCLUDE_NSFW", "true").lower() == "true"
+
+# Number of candidate matches Fluffle should return (Fluffle accepts 8–32).
+FLUFFLE_LIMIT = max(8, min(32, int(os.getenv("FLUFFLE_LIMIT", "32"))))
+
+# Restrict the search to specific platforms (comma-separated). Empty = search all.
+# Valid names: "Fur Affinity", "Twitter", "e621", "Weasyl", "Furry Network",
+#              "DeviantArt", "Inkbunny", "Bluesky"
+FLUFFLE_PLATFORMS = [
+    p.strip() for p in os.getenv("FLUFFLE_PLATFORMS", "").split(",") if p.strip()
+]
+
+# Network timeout (seconds) for a single Fluffle request.
+FLUFFLE_TIMEOUT = int(os.getenv("FLUFFLE_TIMEOUT", "30"))
+
+# Longest edge (px) an image is resized to before uploading to Fluffle. Keeps the
+# payload comfortably under Fluffle's 4 MiB / 16 MP limits and speeds up matching.
+FLUFFLE_MAX_DIMENSION = int(os.getenv("FLUFFLE_MAX_DIMENSION", "2048"))
+
+# ------------------------------------------------------------------------------
+# Result selection
+# ------------------------------------------------------------------------------
+
+# Fluffle grades each result by confidence. The list also defines preference
+# (best first). Only tiers listed in ACCEPTED_MATCHES are trusted enough to
+# auto-edit a channel caption. Compared case-insensitively (Fluffle returns
+# e.g. "exact"/"tossUp"/"alternative"/"unlikely"), so keep these lowercase.
+MATCH_ORDER = ["exact", "tossup", "alternative", "unlikely"]
+
+ACCEPTED_MATCHES = {
+    m.strip().lower()
+    for m in os.getenv("FLUFFLE_ACCEPTED_MATCHES", "exact,tossUp").split(",")
+    if m.strip()
 }
 
-# ==============================================================================
-# Cookie Locations
-# ==============================================================================
+# When several trusted results tie on confidence, prefer the platform with the
+# richest / most reliable artist attribution. Lower number = higher priority.
+# NOTE: Fluffle's response `platform` field uses camelCase machine names
+# ("furAffinity", "deviantArt", ...). Keys here are normalised to
+# lowercase-alphanumeric so casing/spacing never matters when looking them up.
+PLATFORM_PRIORITY = {
+    "e621": 0,
+    "furaffinity": 1,
+    "weasyl": 2,
+    "inkbunny": 3,
+    "furrynetwork": 4,
+    "deviantart": 5,
+    "twitter": 6,
+    "bluesky": 7,
+}
 
-FURAFFINITY_COOKIES = COOKIES_DIR / "furaffinity_cookies.json"
-BLUESKY_COOKIES = COOKIES_DIR / "bluesky_cookies.json"
+# Pretty, human-readable names for captions, keyed by the same normalised name.
+PLATFORM_DISPLAY_NAMES = {
+    "e621": "e621",
+    "furaffinity": "Fur Affinity",
+    "weasyl": "Weasyl",
+    "inkbunny": "Inkbunny",
+    "furrynetwork": "Furry Network",
+    "deviantart": "DeviantArt",
+    "twitter": "Twitter",
+    "bluesky": "Bluesky",
+}
+
+# e621 artist "tags" that are not real artist names — filtered out of credits.
+META_ARTIST_TAGS = {
+    "unknown_artist", "anonymous_artist", "avoid_posting", "third-party_edit",
+    "sound_warning", "epilepsy_warning", "ai_generated", "stable_diffusion",
+    "novelai",
+}
 
 # ==============================================================================
 # Channel Management

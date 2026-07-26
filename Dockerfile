@@ -5,18 +5,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
+# Only the CA certificates and fonts are needed now that reverse-image search is
+# handled by the Fluffle HTTP API (no more headless Chromium / Selenium).
 RUN apt-get update && apt-get install -y \
-    chromium \
-    chromium-driver \
     ca-certificates \
     fonts-liberation \
     fonts-dejavu \
-    wget \
-    unzip \
     && rm -rf /var/lib/apt/lists/*
-
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROMEDRIVER=/usr/bin/chromedriver
 
 COPY requirements.txt .
 
