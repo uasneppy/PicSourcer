@@ -1,0 +1,22 @@
+# Secrets and Telegram sessions
+.env
+.env.*
+!.env.example
+*.session
+*.session-journal
+*cookies*.json
+
+# Runtime data
+bot.log
+edited_posts.json
+data/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS / tooling junk
+.DS_Store
+attached_assets/

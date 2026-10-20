@@ -34,7 +34,9 @@ class SourceBot:
         self.is_paused = False
         self.shutdown_event = asyncio.Event()
         self.authenticated_users = set()  
-        self.BOT_PASSWORD = os.getenv("BOT_PASSWORD", "")  
+        self.BOT_PASSWORD = os.getenv("BOT_PASSWORD", "")
+        if not self.BOT_PASSWORD:
+            logger.warning("BOT_PASSWORD is not set: nobody can authenticate with /password")
         self.stopped_channels = set()
         self.edited_posts = self._load_edited_posts()  # Track posts that have been edited with source info
 
@@ -118,7 +120,7 @@ class SourceBot:
         provided_password = context.args[0]
         user_id = update.effective_user.id
 
-        if provided_password == self.BOT_PASSWORD:
+        if self.BOT_PASSWORD and provided_password == self.BOT_PASSWORD:
             self.authenticated_users.add(user_id)
             await update.message.reply_text("Authentication successful! You can now use all bot features.")
             logger.info(f"User {user_id} successfully authenticated")

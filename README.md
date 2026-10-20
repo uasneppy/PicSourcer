@@ -74,7 +74,7 @@ FLUFFLE_ACCEPTED_MATCHES=exact,tossUp
 # FLUFFLE_PLATFORMS=e621,Fur Affinity,Twitter
 ```
 
-Set your bot password by editing `self.BOT_PASSWORD` in `bot.py`.
+Set the admin password with `BOT_PASSWORD=...` in `.env`. If it is empty, nobody can use `/password`.
 
 ### 3️⃣ Start the Bot
 ```bash
